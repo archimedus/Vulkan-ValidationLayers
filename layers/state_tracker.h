@@ -488,6 +488,41 @@ class ValidationStateTracker : public ValidationObject {
         }
     }
 
+    struct SimpleErrorLocation {
+        const char* func_name;
+        const char* vuid;
+        const char* FuncName() const { return func_name; }
+        const std::string Vuid() const { return vuid; }
+        SimpleErrorLocation(const char* func_name_, const char* vuid_) : func_name(func_name_), vuid(vuid_) {}
+    };
+
+    template <typename T1>
+    bool VerifyBoundMemoryIsValid(const DEVICE_MEMORY_STATE* mem_state, const T1 object, const VulkanTypedHandle& typed_handle,
+                                  const char* api_name, const char* error_code) const {
+        return VerifyBoundMemoryIsValid<T1, SimpleErrorLocation>(mem_state, object, typed_handle, {api_name, error_code});
+    }
+
+    template <typename T1, typename LocType>
+    bool VerifyBoundMemoryIsValid(const DEVICE_MEMORY_STATE* mem_state, const T1 object, const VulkanTypedHandle& typed_handle,
+                                  const LocType& location) const {
+        bool result = false;
+        auto type_name = object_string[typed_handle.type];
+        if (!mem_state) {
+            result |= LogError(object, location.Vuid(),
+                               "%s: %s used with no memory bound. Memory should be bound by calling vkBind%sMemory().",
+                               location.FuncName(), report_data->FormatHandle(typed_handle).c_str(), type_name + 2);
+        } else if (mem_state->Destroyed()) {
+            result |= LogError(object, location.Vuid(),
+                               "%s: %s used with no memory bound and previously bound memory was freed. Memory must not be freed "
+                               "prior to this operation.",
+                               location.FuncName(), report_data->FormatHandle(typed_handle).c_str());
+        }
+        return result;
+    }
+    bool ValidateMemoryIsBoundToBuffer(const BUFFER_STATE*, const char*, const char*) const;
+    bool ValidatePipelineBindPoint(const CMD_BUFFER_STATE* cb_state, VkPipelineBindPoint bind_point, const char* func_name,
+                                   const std::map<VkPipelineBindPoint, std::string>& bind_errors) const;
+
     // State update functions
     // Gets/Enumerations
     virtual std::shared_ptr<PHYSICAL_DEVICE_STATE> CreatePhysicalDeviceState(VkPhysicalDevice phys_dev);
@@ -1357,6 +1392,42 @@ class ValidationStateTracker : public ValidationObject {
                                       VkFence fence) override;
     void PreCallRecordQueueSubmit2(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2* pSubmits, VkFence fence) override;
 
+    bool PreCallValidateGetDescriptorSetLayoutSizeEXT(VkDevice device, VkDescriptorSetLayout layout,
+                                                      VkDeviceSize* pLayoutSizeInBytes) const override;
+    void PostCallRecordGetDescriptorSetLayoutSizeEXT(VkDevice device, VkDescriptorSetLayout layout,
+                                                     VkDeviceSize* pLayoutSizeInBytes) override;
+    bool PreCallValidateGetDescriptorSetLayoutBindingOffsetEXT(VkDevice device, VkDescriptorSetLayout layout, uint32_t binding,
+                                                               VkDeviceSize* pOffset) const override;
+    bool PreCallValidateGetBufferOpaqueCaptureDescriptorDataEXT(VkDevice device, const VkBufferCaptureDescriptorDataInfoEXT* pInfo,
+                                                                void* pData) const override;
+    bool PreCallValidateGetImageOpaqueCaptureDescriptorDataEXT(VkDevice device, const VkImageCaptureDescriptorDataInfoEXT* pInfo,
+                                                               void* pData) const override;
+    bool PreCallValidateGetImageViewOpaqueCaptureDescriptorDataEXT(VkDevice device,
+                                                                   const VkImageViewCaptureDescriptorDataInfoEXT* pInfo,
+                                                                   void* pData) const override;
+    bool PreCallValidateGetSamplerOpaqueCaptureDescriptorDataEXT(VkDevice device,
+                                                                 const VkSamplerCaptureDescriptorDataInfoEXT* pInfo,
+                                                                 void* pData) const override;
+    bool PreCallValidateGetAccelerationStructureOpaqueCaptureDescriptorDataEXT(
+        VkDevice device, const VkAccelerationStructureCaptureDescriptorDataInfoEXT* pInfo, void* pData) const override;
+    bool PreCallValidateCmdSetDescriptorBufferOffsetsEXT(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
+                                                         VkPipelineLayout layout, uint32_t firstSet, uint32_t setCount,
+                                                         const uint32_t* pBufferIndices,
+                                                         const VkDeviceSize* pOffsets) const override;
+    void PreCallRecordCmdSetDescriptorBufferOffsetsEXT(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
+                                                       VkPipelineLayout layout, uint32_t firstSet, uint32_t setCount,
+                                                       const uint32_t* pBufferIndices, const VkDeviceSize* pOffsets) override;
+    bool PreCallValidateCmdBindDescriptorBufferEmbeddedSamplersEXT(VkCommandBuffer commandBuffer,
+                                                                   VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout,
+                                                                   uint32_t set) const override;
+    bool PreCallValidateCmdBindDescriptorBuffersEXT(VkCommandBuffer commandBuffer, uint32_t bufferCount,
+                                                    const VkDescriptorBufferBindingInfoEXT* pBindingInfos) const override;
+    void PreCallRecordCmdBindDescriptorBuffersEXT(VkCommandBuffer commandBuffer, uint32_t bufferCount,
+                                                  const VkDescriptorBufferBindingInfoEXT* pBindingInfos) override;
+    bool ValidateDescriptorAddressInfoEXT(VkDevice device, const VkDescriptorAddressInfoEXT* address_info) const;
+    bool PreCallValidateGetDescriptorEXT(VkDevice device, const VkDescriptorGetInfoEXT* pDescriptorInfo, size_t dataSize,
+                                         void* pDescriptor) const override;
+
     void RecordGetBufferDeviceAddress(const VkBufferDeviceAddressInfo* pInfo, VkDeviceAddress address);
     void PostCallRecordGetBufferDeviceAddress(VkDevice device, const VkBufferDeviceAddressInfo* pInfo,
                                               VkDeviceAddress address) override;
@@ -1451,6 +1522,8 @@ class ValidationStateTracker : public ValidationObject {
         VkPhysicalDeviceSubgroupSizeControlPropertiesEXT subgroup_size_control_props;
         VkPhysicalDeviceSubgroupProperties subgroup_properties;
         VkPhysicalDeviceExtendedDynamicState3PropertiesEXT extended_dynamic_state3_props;
+        VkPhysicalDeviceDescriptorBufferPropertiesEXT descriptor_buffer_props;
+        VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT descriptor_buffer_density_props;
     };
     DeviceExtensionProperties phys_dev_ext_props = {};
     std::vector<VkCooperativeMatrixPropertiesNV> cooperative_matrix_properties;
@@ -1473,6 +1546,9 @@ class ValidationStateTracker : public ValidationObject {
     mutable ReadWriteLock buffer_address_lock_;
 
     vl_concurrent_unordered_map<uint64_t, VkFormatFeatureFlags2KHR> ahb_ext_formats_map;
+    std::atomic<VkDeviceSize> descriptorBufferAddressSpaceSize = {0u};
+    std::atomic<VkDeviceSize> resourceDescriptorBufferAddressSpaceSize = {0u};
+    std::atomic<VkDeviceSize> samplerDescriptorBufferAddressSpaceSize = {0u};
 
   private:
     VALSTATETRACK_MAP_AND_TRAITS(VkQueue, QUEUE_STATE, queue_map_)

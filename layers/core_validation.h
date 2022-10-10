@@ -152,6 +152,10 @@ struct DrawDispatchVuid {
     const char* mesh_shader_stages = kVUIDUndefined;
     const char* invalid_mesh_shader_stages = kVUIDUndefined;
     const char* missing_mesh_shader_stages = kVUIDUndefined;
+    const char* descriptor_buffer_08114 = kVUIDUndefined;
+    const char* descriptor_buffer_08115 = kVUIDUndefined;
+    const char* descriptor_buffer_08116 = kVUIDUndefined;
+    const char* descriptor_buffer_08117 = kVUIDUndefined;
 };
 
 struct ValidateBeginQueryVuids {
@@ -224,14 +228,6 @@ class CoreChecks : public ValidationStateTracker {
 
     ReadLockGuard ReadLock() override;
     WriteLockGuard WriteLock() override;
-
-    struct SimpleErrorLocation {
-        const char* func_name;
-        const char* vuid;
-        const char* FuncName() const { return func_name; }
-        const std::string Vuid() const { return vuid; }
-        SimpleErrorLocation(const char* func_name_, const char* vuid_) : func_name(func_name_), vuid(vuid_) {}
-    };
 
     bool ValidateSetMemBinding(VkDeviceMemory mem, const BINDABLE& mem_binding, const char* apiName) const;
     bool ValidateDeviceQueueFamily(uint32_t queue_family, const char* cmd_name, const char* parameter_name, const char* error_code,
@@ -357,8 +353,6 @@ class CoreChecks : public ValidationStateTracker {
     bool ValidateCreateSwapchain(const char* func_name, VkSwapchainCreateInfoKHR const* pCreateInfo,
                                  const SURFACE_STATE* surface_state, const SWAPCHAIN_NODE* old_swapchain_state) const;
     bool ValidateGraphicsPipelineBindPoint(const CMD_BUFFER_STATE* cb_state, const PIPELINE_STATE* pipeline_state) const;
-    bool ValidatePipelineBindPoint(const CMD_BUFFER_STATE* cb_state, VkPipelineBindPoint bind_point, const char* func_name,
-                                   const std::map<VkPipelineBindPoint, std::string>& bind_errors) const;
     bool ValidateMemoryIsMapped(const char* funcName, uint32_t memRangeCount, const VkMappedMemoryRange* pMemRanges) const;
     bool ValidateMappedMemoryRangeDeviceLimits(const char* func_name, uint32_t mem_range_count,
                                                const VkMappedMemoryRange* mem_ranges) const;
@@ -453,7 +447,6 @@ class CoreChecks : public ValidationStateTracker {
                                                     VkPipelineStageFlags2KHR stage_mask) const;
     bool ValidateUpdateDescriptorSetWithTemplate(VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplate descriptorUpdateTemplate,
                                                  const void* pData) const;
-    bool ValidateMemoryIsBoundToBuffer(const BUFFER_STATE*, const char*, const char*) const;
     bool ValidateHostVisibleMemoryIsBoundToBuffer(const BUFFER_STATE*, const char*, const char*) const;
     bool ValidateMemoryIsBoundToImage(const IMAGE_STATE*, const char*, const char*) const;
     bool ValidateMemoryIsBoundToImage(const IMAGE_STATE*, const Location&) const;
@@ -908,13 +901,6 @@ class CoreChecks : public ValidationStateTracker {
     bool ValidateCmdBufImageLayouts(const Location& loc, const CMD_BUFFER_STATE* pCB, GlobalImageLayoutMap& overlayLayoutMap) const;
 
     void UpdateCmdBufImageLayouts(CMD_BUFFER_STATE* pCB);
-
-    template <typename T1>
-    bool VerifyBoundMemoryIsValid(const DEVICE_MEMORY_STATE* mem_state, const T1 object, const VulkanTypedHandle& typed_handle,
-                                  const char* api_name, const char* error_code) const;
-    template <typename T1, typename LocType>
-    bool VerifyBoundMemoryIsValid(const DEVICE_MEMORY_STATE* mem_state, const T1 object, const VulkanTypedHandle& typed_handle,
-                                  const LocType& location) const;
 
     bool ValidateLayoutVsAttachmentDescription(const debug_report_data* report_data, RenderPassCreateVersion rp_version,
                                                const VkImageLayout first_layout, const uint32_t attachment,
@@ -1957,6 +1943,7 @@ class CoreChecks : public ValidationStateTracker {
                                            VkResult result) override;
     bool PreCallValidateGetImageSubresourceLayout2EXT(VkDevice device, VkImage image, const VkImageSubresource2EXT* pSubresource,
                                                       VkSubresourceLayout2EXT* pLayout) const override;
+
 #ifdef VK_USE_PLATFORM_METAL_EXT
     bool PreCallValidateExportMetalObjectsEXT(VkDevice device, VkExportMetalObjectsInfoEXT* pMetalObjectsInfo) const override;
 #endif // VK_USE_PLATFORM_METAL_EXT

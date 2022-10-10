@@ -1237,3 +1237,44 @@ bool ObjectLifetimes::PreCallValidateExportMetalObjectsEXT(VkDevice device, VkEx
     return skip;
 }
 #endif  //  VK_USE_PLATFORM_METAL_EXT
+
+bool ObjectLifetimes::PreCallValidateGetDescriptorEXT(
+    VkDevice                                    device,
+    const VkDescriptorGetInfoEXT*               pDescriptorInfo,
+    size_t                                      dataSize,
+    void*                                       pDescriptor) const {
+    bool skip = false;
+    skip |= ValidateObject(device, kVulkanObjectTypeDevice, false, kVUIDUndefined, kVUIDUndefined);
+    if (pDescriptorInfo) {
+        switch (pDescriptorInfo->type) {
+            case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: {
+                if (pDescriptorInfo->data.pCombinedImageSampler) {
+                    skip |= ValidateObject(pDescriptorInfo->data.pCombinedImageSampler->sampler, kVulkanObjectTypeSampler, true, kVUIDUndefined, "VUID-VkDescriptorImageInfo-commonparent");
+                    skip |= ValidateObject(pDescriptorInfo->data.pCombinedImageSampler->imageView, kVulkanObjectTypeImageView, true, kVUIDUndefined, "VUID-VkDescriptorImageInfo-commonparent");
+                }
+			} break;
+            case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: {
+                if (pDescriptorInfo->data.pSampledImage) {
+                    skip |= ValidateObject(pDescriptorInfo->data.pSampledImage->sampler, kVulkanObjectTypeSampler, true, kVUIDUndefined, "VUID-VkDescriptorImageInfo-commonparent");
+                    skip |= ValidateObject(pDescriptorInfo->data.pSampledImage->imageView, kVulkanObjectTypeImageView, true, kVUIDUndefined, "VUID-VkDescriptorImageInfo-commonparent");
+                }
+			} break;
+            case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: {
+                if (pDescriptorInfo->data.pStorageImage) {
+                    skip |= ValidateObject(pDescriptorInfo->data.pStorageImage->sampler, kVulkanObjectTypeSampler, true, kVUIDUndefined, "VUID-VkDescriptorImageInfo-commonparent");
+                    skip |= ValidateObject(pDescriptorInfo->data.pStorageImage->imageView, kVulkanObjectTypeImageView, true, kVUIDUndefined, "VUID-VkDescriptorImageInfo-commonparent");
+                }
+			} break;
+            case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: {
+                if (pDescriptorInfo->data.pInputAttachmentImage) {
+                    skip |= ValidateObject(pDescriptorInfo->data.pInputAttachmentImage->sampler, kVulkanObjectTypeSampler, true, kVUIDUndefined, "VUID-VkDescriptorImageInfo-commonparent");
+                    skip |= ValidateObject(pDescriptorInfo->data.pInputAttachmentImage->imageView, kVulkanObjectTypeImageView, true, kVUIDUndefined, "VUID-VkDescriptorImageInfo-commonparent");
+                }
+			} break;
+            default:
+                break;
+        }
+    }
+
+    return skip;
+}

@@ -148,6 +148,10 @@ struct DispatchVuidsCmdDraw : DrawDispatchVuid {
         primitives_generated               = "VUID-vkCmdDraw-primitivesGeneratedQueryWithRasterizerDiscard-06708";
         primitives_generated_streams       = "VUID-vkCmdDraw-primitivesGeneratedQueryWithNonZeroStreams-06709";
         invalid_mesh_shader_stages         = "VUID-vkCmdDraw-stage-06481";
+        descriptor_buffer_08114            = "VUID-vkCmdDraw-None-08114";
+        descriptor_buffer_08115            = "VUID-vkCmdDraw-None-08115";
+        descriptor_buffer_08116            = "VUID-vkCmdDraw-None-08116";
+        descriptor_buffer_08117            = "VUID-vkCmdDraw-None-08117";
     }
 };
 
@@ -256,6 +260,10 @@ struct DispatchVuidsCmdDrawMultiEXT : DrawDispatchVuid {
         primitives_generated               = "VUID-vkCmdDrawMultiEXT-primitivesGeneratedQueryWithRasterizerDiscard-06708";
         primitives_generated_streams       = "VUID-vkCmdDrawMultiEXT-primitivesGeneratedQueryWithNonZeroStreams-06709";
         invalid_mesh_shader_stages         = "VUID-vkCmdDrawMultiEXT-stage-06481";
+        descriptor_buffer_08114            = "VUID-vkCmdDrawMultiEXT-None-08114";
+        descriptor_buffer_08115            = "VUID-vkCmdDrawMultiEXT-None-08115";
+        descriptor_buffer_08116            = "VUID-vkCmdDrawMultiEXT-None-08116";
+        descriptor_buffer_08117            = "VUID-vkCmdDrawMultiEXT-None-08117";
     }
 };
 
@@ -365,6 +373,10 @@ struct DispatchVuidsCmdDrawIndexed : DrawDispatchVuid {
         primitives_generated               = "VUID-vkCmdDrawIndexed-primitivesGeneratedQueryWithRasterizerDiscard-06708";
         primitives_generated_streams       = "VUID-vkCmdDrawIndexed-primitivesGeneratedQueryWithNonZeroStreams-06709";
         invalid_mesh_shader_stages         = "VUID-vkCmdDrawIndexed-stage-06481";
+        descriptor_buffer_08114            = "VUID-vkCmdDrawIndexed-None-08114";
+        descriptor_buffer_08115            = "VUID-vkCmdDrawIndexed-None-08115";
+        descriptor_buffer_08116            = "VUID-vkCmdDrawIndexed-None-08116";
+        descriptor_buffer_08117            = "VUID-vkCmdDrawIndexed-None-08117";
     }
 };
 
@@ -474,6 +486,10 @@ struct DispatchVuidsCmdDrawMultiIndexedEXT : DrawDispatchVuid {
         primitives_generated               = "VUID-vkCmdDrawMultiIndexedEXT-primitivesGeneratedQueryWithRasterizerDiscard-06708";
         primitives_generated_streams       = "VUID-vkCmdDrawMultiIndexedEXT-primitivesGeneratedQueryWithNonZeroStreams-06709";
         invalid_mesh_shader_stages         = "VUID-vkCmdDrawMultiIndexedEXT-stage-06481";
+        descriptor_buffer_08114            = "VUID-vkCmdDrawMultiIndexedEXT-None-08114";
+        descriptor_buffer_08115            = "VUID-vkCmdDrawMultiIndexedEXT-None-08115";
+        descriptor_buffer_08116            = "VUID-vkCmdDrawMultiIndexedEXT-None-08116";
+        descriptor_buffer_08117            = "VUID-vkCmdDrawMultiIndexedEXT-None-08117";
     }
 };
 
@@ -584,6 +600,10 @@ struct DispatchVuidsCmdDrawIndirect : DrawDispatchVuid {
         primitives_generated               = "VUID-vkCmdDrawIndirect-primitivesGeneratedQueryWithRasterizerDiscard-06708";
         primitives_generated_streams       = "VUID-vkCmdDrawIndirect-primitivesGeneratedQueryWithNonZeroStreams-06709";
         invalid_mesh_shader_stages         = "VUID-vkCmdDrawIndirect-stage-06481";
+        descriptor_buffer_08114            = "VUID-vkCmdDrawIndirect-None-08114";
+        descriptor_buffer_08115            = "VUID-vkCmdDrawIndirect-None-08115";
+        descriptor_buffer_08116            = "VUID-vkCmdDrawIndirect-None-08116";
+        descriptor_buffer_08117            = "VUID-vkCmdDrawIndirect-None-08117";
     }
 };
 
@@ -695,6 +715,10 @@ struct DispatchVuidsCmdDrawIndexedIndirect : DrawDispatchVuid {
         primitives_generated               = "VUID-vkCmdDrawIndexedIndirect-primitivesGeneratedQueryWithRasterizerDiscard-06708";
         primitives_generated_streams       = "VUID-vkCmdDrawIndexedIndirect-primitivesGeneratedQueryWithNonZeroStreams-06709";
         invalid_mesh_shader_stages         = "VUID-vkCmdDrawIndexedIndirect-stage-06481";
+        descriptor_buffer_08114            = "VUID-vkCmdDrawIndexedIndirect-None-08114";
+        descriptor_buffer_08115            = "VUID-vkCmdDrawIndexedIndirect-None-08115";
+        descriptor_buffer_08116            = "VUID-vkCmdDrawIndexedIndirect-None-08116";
+        descriptor_buffer_08117            = "VUID-vkCmdDrawIndexedIndirect-None-08117";
     }
 };
 
@@ -868,6 +892,10 @@ struct DispatchVuidsCmdDrawIndirectCount : DrawDispatchVuid {
         primitives_generated               = "VUID-vkCmdDrawIndirectCount-primitivesGeneratedQueryWithRasterizerDiscard-06708";
         primitives_generated_streams       = "VUID-vkCmdDrawIndirectCount-primitivesGeneratedQueryWithNonZeroStreams-06709";
         invalid_mesh_shader_stages         = "VUID-vkCmdDrawIndirectCount-stage-06481";
+        descriptor_buffer_08114            = "VUID-vkCmdDrawIndirectCount-None-08114";
+        descriptor_buffer_08115            = "VUID-vkCmdDrawIndirectCount-None-08115";
+        descriptor_buffer_08116            = "VUID-vkCmdDrawIndirectCount-None-08116";
+        descriptor_buffer_08117            = "VUID-vkCmdDrawIndirectCount-None-08117";
     }
 };
 
@@ -982,6 +1010,10 @@ struct DispatchVuidsCmdDrawIndexedIndirectCount : DrawDispatchVuid {
         primitives_generated               = "VUID-vkCmdDrawIndexedIndirectCount-primitivesGeneratedQueryWithRasterizerDiscard-06708";
         primitives_generated_streams       = "VUID-vkCmdDrawIndexedIndirectCount-primitivesGeneratedQueryWithNonZeroStreams-06709";
         invalid_mesh_shader_stages         = "VUID-vkCmdDrawIndexedIndirectCount-stage-06481";
+        descriptor_buffer_08114            = "VUID-vkCmdDrawIndexedIndirectCount-None-08114";
+        descriptor_buffer_08115            = "VUID-vkCmdDrawIndexedIndirectCount-None-08115";
+        descriptor_buffer_08116            = "VUID-vkCmdDrawIndexedIndirectCount-None-08116";
+        descriptor_buffer_08117            = "VUID-vkCmdDrawIndexedIndirectCount-None-08117";
     }
 };
 
@@ -1202,6 +1234,10 @@ struct DispatchVuidsCmdDrawMeshTasksNV: DrawDispatchVuid {
         primitives_generated_streams       = "VUID-vkCmdDrawMeshTasksNV-primitivesGeneratedQueryWithNonZeroStreams-06709";
         mesh_shader_stages                 = "VUID-vkCmdDrawMeshTasksNV-stage-06480";
         missing_mesh_shader_stages         = "VUID-vkCmdDrawMeshTasksNV-MeshNV-07080";
+        descriptor_buffer_08114            = "VUID-vkCmdDrawMeshTasksNV-None-08114";
+        descriptor_buffer_08115            = "VUID-vkCmdDrawMeshTasksNV-None-08115";
+        descriptor_buffer_08116            = "VUID-vkCmdDrawMeshTasksNV-None-08116";
+        descriptor_buffer_08117            = "VUID-vkCmdDrawMeshTasksNV-None-08117";
     }
 };
 
@@ -1305,7 +1341,10 @@ struct DispatchVuidsCmdDrawMeshTasksIndirectNV: DrawDispatchVuid {
         primitives_generated_streams       = "VUID-vkCmdDrawMeshTasksIndirectNV-primitivesGeneratedQueryWithNonZeroStreams-06709";
         mesh_shader_stages                 = "VUID-vkCmdDrawMeshTasksIndirectNV-stage-06480";
         missing_mesh_shader_stages         = "VUID-vkCmdDrawMeshTasksIndirectNV-MeshNV-07081";
-        
+        descriptor_buffer_08114            = "VUID-vkCmdDrawMeshTasksIndirectNV-None-08114";
+        descriptor_buffer_08115            = "VUID-vkCmdDrawMeshTasksIndirectNV-None-08115";
+        descriptor_buffer_08116            = "VUID-vkCmdDrawMeshTasksIndirectNV-None-08116";
+        descriptor_buffer_08117            = "VUID-vkCmdDrawMeshTasksIndirectNV-None-08117";
     }
 };
 
@@ -1412,6 +1451,10 @@ struct DispatchVuidsCmdDrawMeshTasksIndirectCountNV : DrawDispatchVuid {
         primitives_generated_streams       = "VUID-vkCmdDrawMeshTasksIndirectCountNV-primitivesGeneratedQueryWithNonZeroStreams-06709";
         mesh_shader_stages                 = "VUID-vkCmdDrawMeshTasksIndirectCountNV-stage-06480";
         missing_mesh_shader_stages         = "VUID-vkCmdDrawMeshTasksIndirectCountNV-MeshNV-07082";
+        descriptor_buffer_08114            = "VUID-vkCmdDrawMeshTasksIndirectCountNV-None-08114";
+        descriptor_buffer_08115            = "VUID-vkCmdDrawMeshTasksIndirectCountNV-None-08115";
+        descriptor_buffer_08116            = "VUID-vkCmdDrawMeshTasksIndirectCountNV-None-08116";
+        descriptor_buffer_08117            = "VUID-vkCmdDrawMeshTasksIndirectCountNV-None-08117";
     }
 };
 
@@ -1545,6 +1588,10 @@ struct DispatchVuidsCmdDrawIndirectByteCountEXT: DrawDispatchVuid {
         primitives_generated               = "VUID-vkCmdDrawIndirectByteCountEXT-primitivesGeneratedQueryWithRasterizerDiscard-06708";
         primitives_generated_streams       = "VUID-vkCmdDrawIndirectByteCountEXT-primitivesGeneratedQueryWithNonZeroStreams-06709";
         invalid_mesh_shader_stages         = "VUID-vkCmdDrawIndirectByteCountEXT-stage-06481";
+        descriptor_buffer_08114            = "VUID-vkCmdDrawIndirectByteCountEXT-None-08114";
+        descriptor_buffer_08115            = "VUID-vkCmdDrawIndirectByteCountEXT-None-08115";
+        descriptor_buffer_08116            = "VUID-vkCmdDrawIndirectByteCountEXT-None-08116";
+        descriptor_buffer_08117            = "VUID-vkCmdDrawIndirectByteCountEXT-None-08117";
     }
 };
 

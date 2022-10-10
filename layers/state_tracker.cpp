@@ -370,6 +370,20 @@ void ValidationStateTracker::PostCallRecordCreateBuffer(VkDevice device, const V
             buffer_state->deviceAddress = opaque_capture_address->opaqueCaptureAddress;
             buffer_address_map_.insert({buffer_state->DeviceAddressRange(), buffer_state});
         }
+
+        const VkBufferUsageFlags descriptor_buffer_usages =
+            VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+            VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
+
+        if ((pCreateInfo->usage & descriptor_buffer_usages) != 0) {
+            descriptorBufferAddressSpaceSize += pCreateInfo->size;
+
+            if ((pCreateInfo->usage & VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT) != 0)
+                resourceDescriptorBufferAddressSpaceSize += pCreateInfo->size;
+
+            if ((pCreateInfo->usage & VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT) != 0)
+                samplerDescriptorBufferAddressSpaceSize += pCreateInfo->size;
+        }
     }
     Add(std::move(buffer_state));
 }
@@ -468,6 +482,19 @@ void ValidationStateTracker::PreCallRecordDestroyBuffer(VkDevice device, VkBuffe
     if (buffer_state) {
         WriteLockGuard guard(buffer_address_lock_);
         buffer_address_map_.erase_range(buffer_state->DeviceAddressRange());
+
+        const VkBufferUsageFlags descriptor_buffer_usages =
+            VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
+
+        if ((buffer_state->createInfo.usage & descriptor_buffer_usages) != 0) {
+            descriptorBufferAddressSpaceSize -= buffer_state->createInfo.size;
+
+            if (buffer_state->createInfo.usage & VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT)
+                resourceDescriptorBufferAddressSpaceSize -= buffer_state->createInfo.size;
+
+            if (buffer_state->createInfo.usage & VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT)
+                samplerDescriptorBufferAddressSpaceSize -= buffer_state->createInfo.size;
+        }
     }
     Destroy<BUFFER_STATE>(buffer);
 }
@@ -931,6 +958,11 @@ void ValidationStateTracker::CreateDevice(const VkDeviceCreateInfo *pCreateInfo)
         const auto *mesh_shader_features = LvlFindInChain<VkPhysicalDeviceMeshShaderFeaturesEXT>(pCreateInfo->pNext);
         if (mesh_shader_features) {
             enabled_features.mesh_shader_features = *mesh_shader_features;
+        }
+
+        const auto *descriptor_buffer_features = LvlFindInChain<VkPhysicalDeviceDescriptorBufferFeaturesEXT>(pCreateInfo->pNext);
+        if (descriptor_buffer_features) {
+            enabled_features.descriptor_buffer_features = *descriptor_buffer_features;
         }
 
         const auto *transform_feedback_features = LvlFindInChain<VkPhysicalDeviceTransformFeedbackFeaturesEXT>(pCreateInfo->pNext);
@@ -1498,6 +1530,10 @@ void ValidationStateTracker::CreateDevice(const VkDeviceCreateInfo *pCreateInfo)
                                    &phys_dev_props->conservative_rasterization_props);
     GetPhysicalDeviceExtProperties(physical_device, dev_ext.vk_ext_subgroup_size_control,
                                    &phys_dev_props->subgroup_size_control_props);
+    GetPhysicalDeviceExtProperties(physical_device, dev_ext.vk_ext_descriptor_buffer,
+                                   &phys_dev_props->descriptor_buffer_props);
+    GetPhysicalDeviceExtProperties(physical_device, dev_ext.vk_ext_descriptor_buffer_density,
+                                   &phys_dev_props->descriptor_buffer_density_props);
     if (api_version >= VK_API_VERSION_1_1) {
         GetPhysicalDeviceExtProperties(physical_device, &phys_dev_props->subgroup_properties);
     }
@@ -5223,4 +5259,291 @@ std::shared_ptr<DEVICE_MEMORY_STATE> ValidationStateTracker::CreateDeviceMemoryS
     const VkMemoryHeap &memory_heap, layer_data::optional<DedicatedBinding> &&dedicated_binding, uint32_t physical_device_count) {
     return std::make_shared<DEVICE_MEMORY_STATE>(mem, p_alloc_info, fake_address, memory_type, memory_heap,
                                                  std::move(dedicated_binding), physical_device_count);
+}
+
+// Check to see if memory was bound to this buffer
+bool ValidationStateTracker::ValidateMemoryIsBoundToBuffer(const BUFFER_STATE *buffer_state, const char *api_name,
+                                                           const char *error_code) const {
+    bool result = false;
+    if (0 == (static_cast<uint32_t>(buffer_state->createInfo.flags) & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)) {
+        result |= VerifyBoundMemoryIsValid(buffer_state->MemState(), buffer_state->buffer(), buffer_state->Handle(), api_name,
+                                           error_code);
+    }
+    return result;
+}
+
+// Validates that the supplied bind point is supported for the command buffer (vis. the command pool)
+// Takes array of error codes as some of the VUID's (e.g. vkCmdBindPipeline) are written per bindpoint
+// TODO add vkCmdBindPipeline bind_point validation using this call.
+bool ValidationStateTracker::ValidatePipelineBindPoint(const CMD_BUFFER_STATE *cb_state, VkPipelineBindPoint bind_point,
+                                                       const char *func_name,
+                                                       const std::map<VkPipelineBindPoint, std::string> &bind_errors) const {
+    bool skip = false;
+    auto pool = cb_state->command_pool;
+    if (pool) {  // The loss of a pool in a recording cmd is reported in DestroyCommandPool
+        static const std::map<VkPipelineBindPoint, VkQueueFlags> flag_mask = {
+            std::make_pair(VK_PIPELINE_BIND_POINT_GRAPHICS, static_cast<VkQueueFlags>(VK_QUEUE_GRAPHICS_BIT)),
+            std::make_pair(VK_PIPELINE_BIND_POINT_COMPUTE, static_cast<VkQueueFlags>(VK_QUEUE_COMPUTE_BIT)),
+            std::make_pair(VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                           static_cast<VkQueueFlags>(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)),
+        };
+        const auto &qfp = physical_device_state->queue_family_properties[pool->queueFamilyIndex];
+        if (0 == (qfp.queueFlags & flag_mask.at(bind_point))) {
+            const std::string &error = bind_errors.at(bind_point);
+            LogObjectList objlist(cb_state->commandBuffer());
+            objlist.add(cb_state->createInfo.commandPool);
+            skip |= LogError(objlist, error, "%s: %s was allocated from %s that does not support bindpoint %s.", func_name,
+                             report_data->FormatHandle(cb_state->commandBuffer()).c_str(),
+                             report_data->FormatHandle(cb_state->createInfo.commandPool).c_str(),
+                             string_VkPipelineBindPoint(bind_point));
+        }
+    }
+    return skip;
+}
+
+bool ValidationStateTracker::PreCallValidateGetDescriptorSetLayoutSizeEXT(VkDevice device, VkDescriptorSetLayout layout,
+                                                                          VkDeviceSize *pLayoutSizeInBytes) const {
+    bool skip = false;
+
+    if (!enabled_features.descriptor_buffer_features.descriptorBuffer) {
+        skip |= LogError(device, "VUID-vkGetDescriptorSetLayoutSizeEXT-None-08011",
+                         "vkGetDescriptorSetLayoutSizeEXT(): The descriptorBuffer feature must: be enabled.");
+    }
+
+    auto setlayout = Get<cvdescriptorset::DescriptorSetLayout>(layout);
+
+    if (!(setlayout->GetCreateFlags() & VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT)) {
+        skip |= LogError(device, "VUID-vkGetDescriptorSetLayoutSizeEXT-layout-08012",
+                         "vkGetDescriptorSetLayoutSizeEXT(): layout must have been created with the "
+                         "VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT flag set.");
+    }
+
+    return skip;
+}
+
+bool ValidationStateTracker::PreCallValidateGetDescriptorSetLayoutBindingOffsetEXT(VkDevice device, VkDescriptorSetLayout layout,
+                                                                                   uint32_t binding, VkDeviceSize *pOffset) const {
+    bool skip = false;
+
+    if (!enabled_features.descriptor_buffer_features.descriptorBuffer) {
+        skip |= LogError(device, "VUID-vkGetDescriptorSetLayoutBindingOffsetEXT-None-08013",
+                         "vkGetDescriptorSetLayoutBindingOffsetEXT(): The descriptorBuffer feature must: be enabled.");
+    }
+
+    auto setlayout = Get<cvdescriptorset::DescriptorSetLayout>(layout);
+
+    if (!(setlayout->GetCreateFlags() & VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT)) {
+        skip |= LogError(device, "VUID-vkGetDescriptorSetLayoutBindingOffsetEXT-layout-08014",
+                         "vkGetDescriptorSetLayoutBindingOffsetEXT(): layout must have been created with the "
+                         "VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT flag set.");
+    }
+
+    return skip;
+}
+
+bool ValidationStateTracker::PreCallValidateGetBufferOpaqueCaptureDescriptorDataEXT(
+    VkDevice device, const VkBufferCaptureDescriptorDataInfoEXT *pInfo, void *pData) const {
+    bool skip = false;
+
+    if (!enabled_features.descriptor_buffer_features.descriptorBufferCaptureReplay) {
+        skip |=
+            LogError(pInfo->buffer, "VUID-vkGetBufferOpaqueCaptureDescriptorDataEXT-None-08072",
+                     "vkGetBufferOpaqueCaptureDescriptorDataEXT(): The descriptorBufferCaptureReplay feature must: be enabled.");
+    }
+
+    // FIXME VUID-vkGetBufferOpaqueCaptureDescriptorDataEXT-pData-08073
+    //    pData must point to a buffer that is at least
+    //        VkPhysicalDeviceDescriptorBufferPropertiesEXT::bufferCaptureReplayDescriptorDataSize bytes in size
+
+    if (physical_device_count > 1 && !enabled_features.core12.bufferDeviceAddressMultiDevice &&
+        !enabled_features.buffer_device_address_ext_features.bufferDeviceAddressMultiDevice) {
+        skip |=
+            LogError(pInfo->buffer, "VUID-vkGetBufferOpaqueCaptureDescriptorDataEXT-device-08074",
+                     "vkGetBufferOpaqueCaptureDescriptorDataEXT(): If device was created with multiple physical devices, then the "
+                     "bufferDeviceAddressMultiDevice feature must: be enabled.");
+    }
+
+    auto buffer_state = Get<BUFFER_STATE>(pInfo->buffer);
+
+    if (buffer_state) {
+        if (!(buffer_state->createInfo.flags & VK_BUFFER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT)) {
+            skip |= LogError(pInfo->buffer, "VUID-VkBufferCaptureDescriptorDataInfoEXT-buffer-08075",
+                             "VkBufferCaptureDescriptorDataInfoEXT: pInfo->buffer must have been created with the "
+                             "VK_BUFFER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT flag set.");
+        }
+    }
+
+    return skip;
+}
+
+bool ValidationStateTracker::PreCallValidateGetImageOpaqueCaptureDescriptorDataEXT(VkDevice device,
+                                                                                   const VkImageCaptureDescriptorDataInfoEXT *pInfo,
+                                                                                   void *pData) const {
+    bool skip = false;
+
+    if (!enabled_features.descriptor_buffer_features.descriptorBufferCaptureReplay) {
+        skip |= LogError(pInfo->image, "VUID-vkGetImageOpaqueCaptureDescriptorDataEXT-None-08076",
+                         "vkGetImageOpaqueCaptureDescriptorDataEXT(): The descriptorBufferCaptureReplay feature must: be enabled.");
+    }
+
+    // FIXME VUID-vkGetImageOpaqueCaptureDescriptorDataEXT-pData-08077
+    // pData must point to a buffer that is at least
+    //     VkPhysicalDeviceDescriptorBufferPropertiesEXT::imageCaptureReplayDescriptorDataSize bytes in size
+
+    if (physical_device_count > 1 && !enabled_features.core12.bufferDeviceAddressMultiDevice &&
+        !enabled_features.buffer_device_address_ext_features.bufferDeviceAddressMultiDevice) {
+        skip |=
+            LogError(pInfo->image, "VUID-vkGetImageOpaqueCaptureDescriptorDataEXT-device-08078",
+                     "vkGetImageOpaqueCaptureDescriptorDataEXT(): If device was created with multiple physical devices, then the "
+                     "bufferDeviceAddressMultiDevice feature must: be enabled.");
+    }
+
+    auto image_state = Get<IMAGE_STATE>(pInfo->image);
+
+    if (image_state) {
+        if (!(image_state->createInfo.flags & VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT)) {
+            skip |= LogError(pInfo->image, "VUID-VkImageCaptureDescriptorDataInfoEXT-image-08079",
+                             "VkImageCaptureDescriptorDataInfoEXT: pInfo->image must have been created with the "
+                             "VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT flag set.");
+        }
+    }
+
+    return skip;
+}
+
+bool ValidationStateTracker::PreCallValidateGetImageViewOpaqueCaptureDescriptorDataEXT(
+    VkDevice device, const VkImageViewCaptureDescriptorDataInfoEXT *pInfo, void *pData) const {
+    bool skip = false;
+
+    if (!enabled_features.descriptor_buffer_features.descriptorBufferCaptureReplay) {
+        skip |=
+            LogError(pInfo->imageView, "VUID-vkGetImageViewOpaqueCaptureDescriptorDataEXT-None-08080",
+                     "vkGetImageViewOpaqueCaptureDescriptorDataEXT(): The descriptorBufferCaptureReplay feature must: be enabled.");
+    }
+
+    // FIXME UID-vkGetImageViewOpaqueCaptureDescriptorDataEXT-pData-08081
+    // pData must point to a buffer that is at least
+    //     VkPhysicalDeviceDescriptorBufferPropertiesEXT::imageViewCaptureReplayDescriptorDataSize bytes in size
+
+    if (physical_device_count > 1 && !enabled_features.core12.bufferDeviceAddressMultiDevice &&
+        !enabled_features.buffer_device_address_ext_features.bufferDeviceAddressMultiDevice) {
+        skip |= LogError(
+            pInfo->imageView, "VUID-vkGetImageViewOpaqueCaptureDescriptorDataEXT-device-08082",
+            "vkGetImageViewOpaqueCaptureDescriptorDataEXT(): If device was created with multiple physical devices, then the "
+            "bufferDeviceAddressMultiDevice feature must: be enabled.");
+    }
+
+    auto image_view_state = Get<IMAGE_VIEW_STATE>(pInfo->imageView);
+
+    if (image_view_state) {
+        if (!(image_view_state->create_info.flags & VK_IMAGE_VIEW_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT)) {
+            skip |= LogError(pInfo->imageView, "VUID-VkImageViewCaptureDescriptorDataInfoEXT-imageView-08083",
+                             "VkImageCaptureDescriptorDataInfoEXT: pInfo->imageView must have been created with the "
+                             "VK_IMAGE_VIEW_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT flag set.");
+        }
+    }
+
+    return skip;
+}
+
+bool ValidationStateTracker::PreCallValidateGetSamplerOpaqueCaptureDescriptorDataEXT(
+    VkDevice device, const VkSamplerCaptureDescriptorDataInfoEXT *pInfo, void *pData) const {
+    bool skip = false;
+
+    if (!enabled_features.descriptor_buffer_features.descriptorBufferCaptureReplay) {
+        skip |=
+            LogError(pInfo->sampler, "VUID-vkGetSamplerOpaqueCaptureDescriptorDataEXT-None-08084",
+                     "vkGetSamplerOpaqueCaptureDescriptorDataEXT(): The descriptorBufferCaptureReplay feature must: be enabled.");
+    }
+
+    // FIXME VUID-vkGetSamplerOpaqueCaptureDescriptorDataEXT-pData-08085
+    // pData must point to a buffer that is at least
+    //    VkPhysicalDeviceDescriptorBufferPropertiesEXT::samplerCaptureReplayDescriptorDataSize bytes in size
+
+    if (physical_device_count > 1 && !enabled_features.core12.bufferDeviceAddressMultiDevice &&
+        !enabled_features.buffer_device_address_ext_features.bufferDeviceAddressMultiDevice) {
+        skip |=
+            LogError(pInfo->sampler, "VUID-vkGetSamplerOpaqueCaptureDescriptorDataEXT-device-08086",
+                     "vkGetSamplerOpaqueCaptureDescriptorDataEXT(): If device was created with multiple physical devices, then the "
+                     "bufferDeviceAddressMultiDevice feature must: be enabled.");
+    }
+
+    auto sampler_state = Get<SAMPLER_STATE>(pInfo->sampler);
+
+    if (sampler_state) {
+        if (!(sampler_state->createInfo.flags & VK_SAMPLER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT)) {
+            skip |= LogError(pInfo->sampler, "VUID-VkSamplerCaptureDescriptorDataInfoEXT-sampler-08087",
+                             "VkSamplerCaptureDescriptorDataInfoEXT: pInfo->sampler must have been created with the "
+                             "VK_SAMPLER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT flag set.");
+        }
+    }
+
+    return skip;
+}
+
+bool ValidationStateTracker::PreCallValidateGetAccelerationStructureOpaqueCaptureDescriptorDataEXT(
+    VkDevice device, const VkAccelerationStructureCaptureDescriptorDataInfoEXT *pInfo, void *pData) const {
+    bool skip = false;
+
+    if (!enabled_features.descriptor_buffer_features.descriptorBufferCaptureReplay) {
+        skip |= LogError(device, "VUID-vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT-None-08088",
+                         "vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT(): The descriptorBufferCaptureReplay feature "
+                         "must: be enabled.");
+    }
+
+    // FIXME VUID-vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT-pData-08089
+    // pData must point to a buffer that is at least
+    //  VkPhysicalDeviceDescriptorBufferPropertiesEXT::accelerationStructureCaptureReplayDescriptorDataSize bytes in size
+
+    if (physical_device_count > 1 && !enabled_features.core12.bufferDeviceAddressMultiDevice &&
+        !enabled_features.buffer_device_address_ext_features.bufferDeviceAddressMultiDevice) {
+        skip |= LogError(device, "VUID-vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT-device-08090",
+                         "vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT(): If device was created with multiple physical "
+                         "devices, then the "
+                         "bufferDeviceAddressMultiDevice feature must: be enabled.");
+    }
+
+    if (pInfo->accelerationStructure != VK_NULL_HANDLE) {
+        auto acceleration_structure_state = Get<ACCELERATION_STRUCTURE_STATE_KHR>(pInfo->accelerationStructure);
+
+        if (acceleration_structure_state) {
+            if (!(acceleration_structure_state->create_infoKHR.createFlags &
+                  VK_ACCELERATION_STRUCTURE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT)) {
+                skip |= LogError(pInfo->accelerationStructure,
+                                 "VUID-VkAccelerationStructureCaptureDescriptorDataInfoEXT-accelerationStructure-08091",
+                                 "VkAccelerationStructureCaptureDescriptorDataInfoEXT: pInfo->accelerationStructure must have been "
+                                 "created with the "
+                                 "VK_ACCELERATION_STRUCTURE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT flag set.");
+            }
+        }
+
+        if (pInfo->accelerationStructureNV != VK_NULL_HANDLE) {
+            LogError(device, "VUID-VkAccelerationStructureCaptureDescriptorDataInfoEXT-accelerationStructureNV-08093",
+                     "VkAccelerationStructureCaptureDescriptorDataInfoEXT(): If accelerationStructure is not VK_NULL_HANDLE, "
+                     "accelerationStructureNV must be VK_NULL_HANDLE. ");
+        }
+    }
+
+    if (pInfo->accelerationStructureNV != VK_NULL_HANDLE) {
+        auto acceleration_structure_state = Get<ACCELERATION_STRUCTURE_STATE>(pInfo->accelerationStructureNV);
+
+        if (acceleration_structure_state) {
+            if (!(acceleration_structure_state->create_infoNV.info.flags &
+                  VK_ACCELERATION_STRUCTURE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT)) {
+                skip |= LogError(pInfo->accelerationStructureNV,
+                                 "VUID-VkAccelerationStructureCaptureDescriptorDataInfoEXT-accelerationStructureNV-08092",
+                                 "VkAccelerationStructureCaptureDescriptorDataInfoEXT: pInfo->accelerationStructure must have been "
+                                 "created with the "
+                                 "VK_ACCELERATION_STRUCTURE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT flag set.");
+            }
+        }
+
+        if (pInfo->accelerationStructure != VK_NULL_HANDLE) {
+            LogError(device, "VUID-VkAccelerationStructureCaptureDescriptorDataInfoEXT-accelerationStructureNV-08094",
+                     "VkAccelerationStructureCaptureDescriptorDataInfoEXT(): If accelerationStructureNV is not VK_NULL_HANDLE, "
+                     "accelerationStructure must be VK_NULL_HANDLE. ");
+        }
+    }
+
+    return skip;
 }

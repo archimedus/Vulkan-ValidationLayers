@@ -2228,6 +2228,21 @@ bool CoreChecks::PreCallValidateCreateImage(VkDevice device, const VkImageCreate
         }
     }
 
+    if ((pCreateInfo->flags & VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT) &&
+        !enabled_features.descriptor_buffer_features.descriptorBufferCaptureReplay) {
+        skip |=
+            LogError(device, "VUID-VkImageCreateInfo-flags-08104",
+                     "vkCreateImage(): the descriptorBufferCaptureReplay device feature is disabled: Images cannot be created with "
+                     "the VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT.");
+    }
+
+    auto opaque_capture_descriptor_buffer = LvlFindInChain<VkOpaqueCaptureDescriptorDataCreateInfoEXT>(pCreateInfo->pNext);
+    if (opaque_capture_descriptor_buffer && !(pCreateInfo->flags & VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT)) {
+        skip |= LogError(device, "VUID-VkImageCreateInfo-pNext-08105",
+                         "vkCreateImage(): VkOpaqueCaptureDescriptorDataCreateInfoEXT is in pNext chain, but "
+                         "VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT is not set.");
+    }
+
     return skip;
 }
 
@@ -5191,6 +5206,68 @@ bool CoreChecks::PreCallValidateCreateBuffer(VkDevice device, const VkBufferCrea
         }
     }
 
+    if ((pCreateInfo->usage & VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT) &&
+        ((pCreateInfo->size + samplerDescriptorBufferAddressSpaceSize > phys_dev_ext_props.descriptor_buffer_props.samplerDescriptorBufferAddressSpaceSize) ||
+         (pCreateInfo->size + descriptorBufferAddressSpaceSize > phys_dev_ext_props.descriptor_buffer_props.descriptorBufferAddressSpaceSize))) {
+        skip |= LogError(
+            device, "VUID-VkBufferCreateInfo-usage-08097",
+            "vkCreateBuffer(): If usage includes VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT, creating this VkBuffer "
+            "must not cause the total required space for all currently valid buffers using this flag on the device to exceed "
+            "VkPhysicalDeviceDescriptorBufferPropertiesEXT::samplerDescriptorBufferAddressSpaceSize or "
+            "VkPhysicalDeviceDescriptorBufferPropertiesEXT::descriptorBufferAddressSpaceSize.");
+    }
+
+    if ((pCreateInfo->usage & VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT) &&
+        ((pCreateInfo->size + resourceDescriptorBufferAddressSpaceSize > phys_dev_ext_props.descriptor_buffer_props.resourceDescriptorBufferAddressSpaceSize) ||
+         (pCreateInfo->size + descriptorBufferAddressSpaceSize > phys_dev_ext_props.descriptor_buffer_props.descriptorBufferAddressSpaceSize))) {
+        skip |= LogError(
+            device, "VUID-VkBufferCreateInfo-usage-08098",
+            "vkCreateBuffer(): If usage includes VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT, creating this VkBuffer "
+            "must not cause the total required space for all currently valid buffers using this flag on the device to exceed "
+            "VkPhysicalDeviceDescriptorBufferPropertiesEXT::resourceDescriptorBufferAddressSpaceSize or "
+            "VkPhysicalDeviceDescriptorBufferPropertiesEXT::descriptorBufferAddressSpaceSize");
+    }
+
+    if ((pCreateInfo->flags & VK_BUFFER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT) &&
+        !enabled_features.descriptor_buffer_features.descriptorBufferCaptureReplay) {
+        skip |= LogError(
+            device, "VUID-VkBufferCreateInfo-flags-08099",
+            "vkCreateBuffer(): the descriptorBufferCaptureReplay device feature is disabled: Buffers cannot be created with "
+            "the VK_BUFFER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT.");
+    }
+
+    auto opaque_capture_descriptor_buffer = LvlFindInChain<VkOpaqueCaptureDescriptorDataCreateInfoEXT>(pCreateInfo->pNext);
+    if (opaque_capture_descriptor_buffer && !(pCreateInfo->flags & VK_BUFFER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT)) {
+        skip |= LogError(device, "VUID-VkBufferCreateInfo-pNext-08100",
+                         "vkCreateBuffer(): VkOpaqueCaptureDescriptorDataCreateInfoEXT is in pNext chain, but "
+                         "VK_BUFFER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT is not set.");
+    }
+
+    if ((pCreateInfo->usage & VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT) &&
+        !enabled_features.descriptor_buffer_features.descriptorBufferPushDescriptors) {
+        skip |= LogError(
+            device, "VUID-VkBufferCreateInfo-usage-08101",
+            "vkCreateBuffer(): the descriptorBufferPushDescriptors device feature is disabled: Buffers cannot be created with "
+            "VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT set.");
+    }
+
+    if ((pCreateInfo->usage & VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT) &&
+        phys_dev_ext_props.descriptor_buffer_props.bufferlessPushDescriptors) {
+        skip |=
+            LogError(device, "VUID-VkBufferCreateInfo-usage-08102",
+                     "vkCreateBuffer(): the bufferlessPushDescriptors device feature is VK_TRUE: Buffers cannot be created with "
+                     "VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT set.");
+    }
+
+    if ((pCreateInfo->usage & VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT) &&
+        !(pCreateInfo->usage &
+          (VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT))) {
+        skip |= LogError(
+            device, "VUID-VkBufferCreateInfo-usage-08103",
+            "vkCreateBuffer(): If VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT is set, usage must also contain "
+            "one of VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT or VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT.");
+    }
+
     return skip;
 }
 
@@ -6598,7 +6675,24 @@ bool CoreChecks::PreCallValidateCreateImageView(VkDevice device, const VkImageVi
                                  string_VkFormat(view_format));
             }
         }
+
+        if ((pCreateInfo->flags & VK_IMAGE_VIEW_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT) &&
+            !enabled_features.descriptor_buffer_features.descriptorBufferCaptureReplay) {
+            skip |= LogError(
+                device, "VUID-VkImageViewCreateInfo-flags-08106",
+                "vkCreateImageView(): the descriptorBufferCaptureReplay device feature is disabled: Image views cannot be created with "
+                "the VK_IMAGE_VIEW_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT.");
+        }
+
+        auto opaque_capture_descriptor_buffer = LvlFindInChain<VkOpaqueCaptureDescriptorDataCreateInfoEXT>(pCreateInfo->pNext);
+        if (opaque_capture_descriptor_buffer &&
+            !(pCreateInfo->flags & VK_IMAGE_VIEW_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT)) {
+            skip |= LogError(device, "VUID-VkImageViewCreateInfo-pNext-08107",
+                             "vkCreateImageView(): VkOpaqueCaptureDescriptorDataCreateInfoEXT is in pNext chain, but "
+                             "VK_IMAGE_VIEW_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT is not set.");
+        }
     }
+
     return skip;
 }
 
