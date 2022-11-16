@@ -13,7 +13,7 @@
         },
         {
             "name": "Vulkan-Headers",
-            "url": "https://github.com/KhronosGroup/Vulkan-Headers.git",
+            "url": "https://gitlab.khronos.org/vulkan/Vulkan-Headers.git",
             "sub_dir": "Vulkan-Headers",
             "build_dir": "Vulkan-Headers/build",
             "install_dir": "Vulkan-Headers/build/install",
