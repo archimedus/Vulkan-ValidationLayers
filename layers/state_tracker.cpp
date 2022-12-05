@@ -2492,6 +2492,13 @@ void ValidationStateTracker::PostCallRecordCreateDescriptorSetLayout(VkDevice de
     Add(std::make_shared<cvdescriptorset::DescriptorSetLayout>(pCreateInfo, *pSetLayout));
 }
 
+void ValidationStateTracker::PostCallRecordGetDescriptorSetLayoutSizeEXT(VkDevice device, VkDescriptorSetLayout layout,
+                                                                         VkDeviceSize *pLayoutSizeInBytes) {
+    auto descriptor_set_layout = Get<cvdescriptorset::DescriptorSetLayout>(layout);
+
+    descriptor_set_layout->SetLayoutSizeInBytes(pLayoutSizeInBytes);
+}
+
 void ValidationStateTracker::PostCallRecordCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo *pCreateInfo,
                                                                 const VkAllocationCallbacks *pAllocator,
                                                                 VkPipelineLayout *pPipelineLayout, VkResult result) {
@@ -3028,8 +3035,8 @@ void ValidationStateTracker::PreCallRecordCmdBindDescriptorSets(VkCommandBuffer 
     auto pipeline_layout = Get<PIPELINE_LAYOUT_STATE>(layout);
     std::shared_ptr<cvdescriptorset::DescriptorSet> no_push_desc;
 
-    cb_state->UpdateLastBoundDescriptorSets(pipelineBindPoint, pipeline_layout.get(), firstSet, setCount, pDescriptorSets,
-                                            no_push_desc, dynamicOffsetCount, pDynamicOffsets);
+    cb_state->UpdateLastBoundDescriptorSets(pipelineBindPoint, *pipeline_layout, firstSet, setCount, pDescriptorSets, no_push_desc,
+                                            dynamicOffsetCount, pDynamicOffsets);
 }
 
 void ValidationStateTracker::PreCallRecordCmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer,
@@ -3038,7 +3045,30 @@ void ValidationStateTracker::PreCallRecordCmdPushDescriptorSetKHR(VkCommandBuffe
                                                                   const VkWriteDescriptorSet *pDescriptorWrites) {
     auto cb_state = GetWrite<CMD_BUFFER_STATE>(commandBuffer);
     auto pipeline_layout = Get<PIPELINE_LAYOUT_STATE>(layout);
-    cb_state->PushDescriptorSetState(pipelineBindPoint, pipeline_layout.get(), set, descriptorWriteCount, pDescriptorWrites);
+    cb_state->PushDescriptorSetState(pipelineBindPoint, *pipeline_layout, set, descriptorWriteCount, pDescriptorWrites);
+}
+
+void ValidationStateTracker::PreCallRecordCmdBindDescriptorBuffersEXT(VkCommandBuffer commandBuffer, uint32_t bufferCount,
+                                                                      const VkDescriptorBufferBindingInfoEXT *pBindingInfos) {
+    auto cb_state = Get<CMD_BUFFER_STATE>(commandBuffer);
+
+    cb_state->descriptor_buffer_binding_info.clear();
+    cb_state->descriptor_buffer_binding_info.reserve(bufferCount);
+
+    for (uint32_t i = 0; i < bufferCount; i++) {
+        cb_state->descriptor_buffer_binding_info.push_back(pBindingInfos[i]);
+    }
+}
+
+void ValidationStateTracker::PreCallRecordCmdSetDescriptorBufferOffsetsEXT(VkCommandBuffer commandBuffer,
+                                                                           VkPipelineBindPoint pipelineBindPoint,
+                                                                           VkPipelineLayout layout, uint32_t firstSet,
+                                                                           uint32_t setCount, const uint32_t *pBufferIndices,
+                                                                           const VkDeviceSize *pOffsets) {
+    auto cb_state = Get<CMD_BUFFER_STATE>(commandBuffer);
+    auto pipeline_layout = Get<PIPELINE_LAYOUT_STATE>(layout);
+
+    cb_state->UpdateLastBoundDescriptorBuffers(pipelineBindPoint, *pipeline_layout, firstSet, setCount, pBufferIndices, pOffsets);
 }
 
 void ValidationStateTracker::PostCallRecordCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout,
@@ -4241,7 +4271,7 @@ void ValidationStateTracker::PreCallRecordCmdPushDescriptorSetWithTemplateKHR(Vk
         // Decode the template into a set of write updates
         cvdescriptorset::DecodedTemplateUpdate decoded_template(this, VK_NULL_HANDLE, template_state.get(), pData,
                                                                 dsl->GetDescriptorSetLayout());
-        cb_state->PushDescriptorSetState(template_ci.pipelineBindPoint, layout_data.get(), set,
+        cb_state->PushDescriptorSetState(template_ci.pipelineBindPoint, *layout_data, set,
                                          static_cast<uint32_t>(decoded_template.desc_writes.size()),
                                          decoded_template.desc_writes.data());
     }
